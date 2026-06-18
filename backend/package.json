@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "db:seed": "tsx src/scripts/seed-demo.ts",
     "db:schema": "node -e \"console.log('Apply backend/db/schema.sql to Supabase PostgreSQL')\""
   },
   "dependencies": {
@@ -24,4 +25,3 @@
     "typescript": "^5.7.3"
   }
 }
-
