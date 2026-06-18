@@ -1,6 +1,7 @@
 import pg from "pg";
 import { ApiError } from "../../shared/error-handler.js";
 import type { AuctionRecord, BidRecord, CreateAuctionInput } from "./auctions.types.js";
+import type { PoolClient } from "pg";
 
 const { Pool } = pg;
 
@@ -32,6 +33,37 @@ const mapBid = (row: BidRecord) => ({
   amount: Number(row.amount),
   timestamp: row.timestamp,
 });
+
+async function settleAuctionWithinClient(auctionId: string, client: PoolClient) {
+  const auctionResult = await client.query<AuctionRecord>(
+    "select * from auctions where id = $1 for update",
+    [auctionId],
+  );
+  const auctionRow = auctionResult.rows[0];
+  if (!auctionRow) {
+    throw new ApiError(404, "Auction not found");
+  }
+
+  const auction = mapAuction(auctionRow);
+  if (auction.status === "ended" || auction.status === "sold") {
+    return auction;
+  }
+
+  const highestBid = await auctionsRepository.findHighestBid(auctionId, client);
+  const shouldSell =
+    highestBid !== null &&
+    (auction.reservePrice === null || highestBid >= auction.reservePrice);
+  const status = shouldSell ? "sold" : "ended";
+
+  const updateResult = await client.query<AuctionRecord>(
+    `update auctions
+     set status = $2
+     where id = $1
+     returning *`,
+    [auctionId, status],
+  );
+  return mapAuction(updateResult.rows[0]);
+}
 
 export const auctionsRepository = {
   async create(input: CreateAuctionInput & { title: string; partNumber: string; manufacturer: string; quantity: number }) {
@@ -92,6 +124,33 @@ export const auctionsRepository = {
     }));
   },
 
+  async resolveExpiredAuctions(now = new Date()) {
+    const result = await pool.query<AuctionRecord & { highest_bid: string | null }>(
+      `with expired as (
+         select
+           a.id,
+           max(b.amount) as highest_bid,
+           a.reserve_price
+         from auctions a
+         left join bids b on b.auction_id = a.id
+         where a.status = 'live' and a.end_time <= $1
+         group by a.id, a.reserve_price
+       )
+       update auctions a
+       set status = case
+         when expired.highest_bid is not null
+           and (expired.reserve_price is null or expired.highest_bid::numeric >= expired.reserve_price)
+         then 'sold'
+         else 'ended'
+       end
+       from expired
+       where a.id = expired.id
+       returning a.*`,
+      [now.toISOString()],
+    );
+    return result.rows.map(mapAuction);
+  },
+
   async findById(id: string) {
     const result = await pool.query<AuctionRecord>(
       "select * from auctions where id = $1",
@@ -140,8 +199,24 @@ export const auctionsRepository = {
     return result.rows[0] ? mapAuction(result.rows[0]) : null;
   },
 
+  async settleAuction(auctionId: string) {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const settled = await settleAuctionWithinClient(auctionId, client);
+      await client.query("commit");
+      return settled;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   async placeBid(input: { auctionId: string; bidderCompanyId: string; amount: number }) {
     const client = await pool.connect();
+    let transactionClosed = false;
     try {
       await client.query("begin");
       const auctionResult = await client.query<AuctionRecord>(
@@ -155,6 +230,12 @@ export const auctionsRepository = {
 
       const auction = mapAuction(auctionRow);
       if (auction.status === "ended" || auction.status === "sold") {
+        throw new ApiError(400, "Cannot bid on ended auction");
+      }
+      if (auction.status === "live" && new Date(auction.endTime) <= new Date()) {
+        await settleAuctionWithinClient(input.auctionId, client);
+        await client.query("commit");
+        transactionClosed = true;
         throw new ApiError(400, "Cannot bid on ended auction");
       }
       if (auction.status !== "live") {
@@ -175,12 +256,15 @@ export const auctionsRepository = {
       );
 
       await client.query("commit");
+      transactionClosed = true;
       return {
         bid: mapBid(bidResult.rows[0]),
         highestBid: input.amount,
       };
     } catch (error) {
-      await client.query("rollback");
+      if (!transactionClosed) {
+        await client.query("rollback");
+      }
       throw error;
     } finally {
       client.release();
@@ -188,44 +272,6 @@ export const auctionsRepository = {
   },
 
   async closeAuction(auctionId: string) {
-    const client = await pool.connect();
-    try {
-      await client.query("begin");
-      const auctionResult = await client.query<AuctionRecord>(
-        "select * from auctions where id = $1 for update",
-        [auctionId],
-      );
-      const auctionRow = auctionResult.rows[0];
-      if (!auctionRow) {
-        throw new ApiError(404, "Auction not found");
-      }
-
-      const auction = mapAuction(auctionRow);
-      if (auction.status === "ended" || auction.status === "sold") {
-        await client.query("commit");
-        return auction;
-      }
-
-      const highestBid = await auctionsRepository.findHighestBid(auctionId, client);
-      const shouldSell =
-        highestBid !== null &&
-        (auction.reservePrice === null || highestBid >= auction.reservePrice);
-
-      const status = shouldSell ? "sold" : "ended";
-      const updateResult = await client.query<AuctionRecord>(
-        `update auctions
-         set status = $2
-         where id = $1
-         returning *`,
-        [auctionId, status],
-      );
-      await client.query("commit");
-      return mapAuction(updateResult.rows[0]);
-    } catch (error) {
-      await client.query("rollback");
-      throw error;
-    } finally {
-      client.release();
-    }
+    return auctionsRepository.settleAuction(auctionId);
   },
 };

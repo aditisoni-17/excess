@@ -2,6 +2,7 @@ import { ApiError } from "../../shared/error-handler.js";
 import { auctionsRepository } from "./auctions.repository.js";
 import { createAuctionSchema, bidAuctionSchema, auctionIdParamSchema } from "./auctions.validation.js";
 import { inventoryService } from "../inventory/inventory.service.js";
+import { auctionLifecycleService } from "./auction-lifecycle.service.js";
 
 export const auctionsService = {
   async createAuction(body: unknown) {
@@ -31,12 +32,14 @@ export const auctionsService = {
   },
 
   async listAuctions() {
+    await auctionLifecycleService.resolveExpiredAuctions();
     const auctions = await auctionsRepository.list();
     return auctions;
   },
 
   async getAuctionById(id: string) {
     auctionIdParamSchema.parse({ id });
+    await auctionLifecycleService.resolveExpiredAuction(id);
     const auction = await auctionsRepository.findById(id);
     if (!auction) {
       throw new ApiError(404, "Auction not found");
@@ -60,6 +63,9 @@ export const auctionsService = {
     if (auction.status !== "draft") {
       throw new ApiError(400, "Only draft auctions can be published");
     }
+    if (new Date(auction.endTime) <= new Date()) {
+      throw new ApiError(400, "Cannot publish an expired auction");
+    }
     return auctionsRepository.publish(id);
   },
 
@@ -75,7 +81,6 @@ export const auctionsService = {
 
   async closeAuction(id: string) {
     auctionIdParamSchema.parse({ id });
-    const auction = await auctionsRepository.closeAuction(id);
-    return auction;
+    return auctionLifecycleService.settleAuction(id);
   },
 };

@@ -1,6 +1,7 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import { auctionLifecycleService } from "./features/auctions/auction-lifecycle.service.js";
 import { auctionsRouter } from "./features/auctions/auctions.routes.js";
 import { inventoryRouter } from "./features/inventory/inventory.routes.js";
 import { errorHandler } from "./shared/error-handler.js";
@@ -25,6 +26,8 @@ app.get("/health", (_req, res) => {
 app.use("/inventory", inventoryRouter);
 app.use("/auctions", auctionsRouter);
 app.use(errorHandler);
+
+auctionLifecycleService.startAutoResolution();
 
 app.listen(port, () => {
   console.log(`Mirai Auction API listening on http://localhost:${port}`);
