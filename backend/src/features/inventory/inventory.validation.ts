@@ -8,14 +8,12 @@ export const inventoryIdParamSchema = z.object({
 });
 
 export const createInventorySchema = z.object({
-  companyId: uuidSchema,
-  sku: text.max(100),
   partNumber: text.max(100),
   manufacturer: text.max(120),
-  title: text.max(180),
-  description: z.string().trim().max(5000).optional().default(""),
+  dateCode: text.max(40),
   quantity: z.coerce.number().int().nonnegative(),
-  unitCondition: z.string().trim().min(1).max(80).optional().default("unknown"),
+  unitCondition: z.string().trim().min(1).max(80),
   location: z.string().trim().max(120).optional().default(""),
 });
 
+export const updateInventorySchema = createInventorySchema;

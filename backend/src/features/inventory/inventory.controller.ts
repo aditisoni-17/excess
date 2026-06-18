@@ -27,5 +27,28 @@ export const inventoryController = {
       next(error);
     }
   },
-};
 
+  async updateInventory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const inventory = await inventoryService.updateInventory(req.params.id, req.body);
+      res.json({
+        success: true,
+        data: inventory,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteInventory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await inventoryService.deleteInventory(req.params.id);
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+};

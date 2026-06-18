@@ -27,6 +27,7 @@ export interface InventoryItem {
   manufacturer: string;
   title: string;
   description: string;
+  dateCode: string;
   quantity: number;
   unitCondition: string;
   location: string;

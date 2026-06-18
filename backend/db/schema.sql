@@ -44,6 +44,7 @@ create table if not exists inventory (
   manufacturer text not null,
   title text not null,
   description text not null default '',
+  date_code text not null default '',
   quantity integer not null check (quantity >= 0),
   unit_condition text not null default 'unknown',
   location text not null default '',

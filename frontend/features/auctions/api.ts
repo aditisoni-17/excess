@@ -21,16 +21,12 @@ export async function fetchAuction(id: string) {
 }
 
 export async function createAuction(payload: {
-  title: string;
-  description: string;
-  category: string;
-  sellerName: string;
+  inventoryId: string;
+  startTime: string;
+  endTime: string;
   startingPrice: number;
   reservePrice?: number;
-  bidIncrement: number;
-  currency: string;
-  startsAt: string;
-  endsAt: string;
+  createdByUserId?: string;
 }) {
   const response = await api.post<{ success: boolean; data: Auction }>("/auctions", payload);
   return response.data.data;
