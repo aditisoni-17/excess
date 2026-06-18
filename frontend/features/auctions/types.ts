@@ -1,4 +1,4 @@
-export type AuctionStatus = "draft" | "scheduled" | "live" | "closed";
+export type AuctionStatus = "draft" | "live" | "ended" | "sold";
 
 export type Bid = {
   id: string;
@@ -11,20 +11,40 @@ export type Bid = {
 
 export type Auction = {
   id: string;
+  inventoryId?: string;
+  createdByUserId?: string | null;
   title: string;
+  partNumber?: string;
+  manufacturer?: string;
+  quantity?: number;
   description: string;
   category: string;
-  sellerName: string;
   startingPrice: number;
   reservePrice: number | null;
-  currentPrice: number;
   bidIncrement: number;
-  currency: string;
+  currentPrice?: number;
+  currency?: string;
   status: AuctionStatus;
-  startsAt: string;
+  startsAt?: string;
   endsAt: string;
   createdAt: string;
   updatedAt: string;
+  highestBid?: number | null;
+  bidCount?: number;
   bids?: Bid[];
 };
 
+export type InventoryItem = {
+  id: string;
+  companyId: string;
+  sku: string;
+  partNumber: string;
+  manufacturer: string;
+  title: string;
+  description: string;
+  quantity: number;
+  unitCondition: string;
+  location: string;
+  createdAt: string;
+  updatedAt: string;
+};

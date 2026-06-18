@@ -1,11 +1,5 @@
-import { AuctionsDashboard } from "../features/auctions/components/auctions-dashboard";
-import { AuctionShell } from "../features/auctions/components/auction-shell";
+import { SellerDashboard } from "../features/seller-dashboard/components/seller-dashboard";
 
 export default function Page() {
-  return (
-    <AuctionShell>
-      <AuctionsDashboard />
-    </AuctionShell>
-  );
+  return <SellerDashboard />;
 }
-

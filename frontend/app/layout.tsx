@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "Mirai Auction Module",
-  description: "Standalone auction module for B2B electronics trading.",
+  title: "Mirai Seller Dashboard",
+  description: "Enterprise dashboard for inventory, auctions, and recovered revenue.",
 };
 
 export default function RootLayout({
