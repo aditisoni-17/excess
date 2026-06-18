@@ -83,6 +83,7 @@ create index if not exists auctions_inventory_id_idx on auctions(inventory_id);
 create index if not exists auctions_status_idx on auctions(status);
 create index if not exists bids_auction_id_timestamp_idx on bids(auction_id, timestamp desc);
 create index if not exists bids_bidder_company_id_idx on bids(bidder_company_id);
+create unique index if not exists auctions_inventory_unique on auctions(inventory_id);
 
 drop trigger if exists companies_touch_updated_at on companies;
 create trigger companies_touch_updated_at
@@ -103,4 +104,3 @@ drop trigger if exists auctions_touch_updated_at on auctions;
 create trigger auctions_touch_updated_at
 before update on auctions
 for each row execute function touch_updated_at();
-

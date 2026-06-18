@@ -13,7 +13,10 @@ export class ApiError extends Error {
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof ZodError) {
     res.status(400).json({
-      error: "Invalid request payload",
+      success: false,
+      error: {
+        message: "Invalid request payload",
+      },
       issues: err.issues,
     });
     return;
@@ -21,5 +24,10 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 
   const statusCode = err instanceof ApiError ? err.statusCode : 500;
   const message = err instanceof Error ? err.message : "Internal server error";
-  res.status(statusCode).json({ error: message });
+  res.status(statusCode).json({
+    success: false,
+    error: {
+      message,
+    },
+  });
 };

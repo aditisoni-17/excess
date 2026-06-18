@@ -1,29 +1,62 @@
-export type AuctionStatus = "draft" | "scheduled" | "live" | "closed";
+import type { AuctionStatus, Bid, InventoryItem } from "../../shared/database.interfaces.js";
 
-export type AuctionRecord = {
+export interface CreateAuctionInput {
+  inventoryId: string;
+  createdByUserId: string | null;
+  startTime: string;
+  endTime: string;
+  startingPrice: number;
+  reservePrice: number | null;
+}
+
+export interface AuctionRecord {
   id: string;
+  inventory_id: string;
+  created_by_user_id: string | null;
   title: string;
-  description: string;
-  category: string;
-  seller_name: string;
+  part_number: string;
+  manufacturer: string;
+  quantity: number;
   starting_price: string;
   reserve_price: string | null;
-  current_price: string;
-  bid_increment: string;
-  currency: string;
+  start_time: string;
+  end_time: string;
   status: AuctionStatus;
-  starts_at: string;
-  ends_at: string;
   created_at: string;
   updated_at: string;
-};
+}
 
-export type BidRecord = {
+export interface BidRecord {
   id: string;
   auction_id: string;
-  bidder_name: string;
-  bidder_company: string;
+  bidder_company_id: string;
   amount: string;
-  created_at: string;
-};
+  timestamp: string;
+}
+
+export interface AuctionView {
+  id: string;
+  inventoryId: string;
+  createdByUserId: string | null;
+  title: string;
+  partNumber: string;
+  manufacturer: string;
+  quantity: number;
+  startingPrice: number;
+  reservePrice: number | null;
+  startTime: string;
+  endTime: string;
+  status: AuctionStatus;
+  createdAt: string;
+  updatedAt: string;
+  highestBid: number | null;
+  bidCount: number;
+  bids?: Bid[];
+  inventory?: InventoryItem;
+}
+
+export interface PublishedAuctionResult {
+  auction: AuctionView;
+  inventoryAlreadyAuctioned: boolean;
+}
 

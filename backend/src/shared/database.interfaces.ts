@@ -51,6 +51,13 @@ export interface Auction {
   updatedAt: string;
 }
 
+export interface AuctionView extends Auction {
+  highestBid: number | null;
+  bidCount: number;
+  bids?: Bid[];
+  inventory?: InventoryItem;
+}
+
 export interface Bid {
   id: string;
   auctionId: string;
@@ -58,4 +65,3 @@ export interface Bid {
   amount: number;
   timestamp: string;
 }
-

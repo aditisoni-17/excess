@@ -1,6 +1,6 @@
 import pg from "pg";
 import { ApiError } from "../../shared/error-handler.js";
-import type { AuctionRecord, BidRecord } from "./auctions.types.js";
+import type { AuctionRecord, BidRecord, CreateAuctionInput } from "./auctions.types.js";
 
 const { Pool } = pg;
 
@@ -10,18 +10,17 @@ const pool = new Pool({
 
 const mapAuction = (row: AuctionRecord) => ({
   id: row.id,
+  inventoryId: row.inventory_id,
+  createdByUserId: row.created_by_user_id,
   title: row.title,
-  description: row.description,
-  category: row.category,
-  sellerName: row.seller_name,
+  partNumber: row.part_number,
+  manufacturer: row.manufacturer,
+  quantity: row.quantity,
   startingPrice: Number(row.starting_price),
   reservePrice: row.reserve_price === null ? null : Number(row.reserve_price),
-  currentPrice: Number(row.current_price),
-  bidIncrement: Number(row.bid_increment),
-  currency: row.currency,
+  startTime: row.start_time,
+  endTime: row.end_time,
   status: row.status,
-  startsAt: row.starts_at,
-  endsAt: row.ends_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -29,18 +28,68 @@ const mapAuction = (row: AuctionRecord) => ({
 const mapBid = (row: BidRecord) => ({
   id: row.id,
   auctionId: row.auction_id,
-  bidderName: row.bidder_name,
-  bidderCompany: row.bidder_company,
+  bidderCompanyId: row.bidder_company_id,
   amount: Number(row.amount),
-  createdAt: row.created_at,
+  timestamp: row.timestamp,
 });
 
 export const auctionsRepository = {
-  async list() {
+  async create(input: CreateAuctionInput & { title: string; partNumber: string; manufacturer: string; quantity: number }) {
     const result = await pool.query<AuctionRecord>(
-      "select * from auctions order by created_at desc",
+      `insert into auctions (
+        inventory_id, created_by_user_id, title, part_number, manufacturer,
+        quantity, starting_price, reserve_price, start_time, end_time, status
+      ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft')
+      returning *`,
+      [
+        input.inventoryId,
+        input.createdByUserId,
+        input.title,
+        input.partNumber,
+        input.manufacturer,
+        input.quantity,
+        input.startingPrice,
+        input.reservePrice,
+        input.startTime,
+        input.endTime,
+      ],
     );
-    return result.rows.map(mapAuction);
+    return mapAuction(result.rows[0]);
+  },
+
+  async list() {
+    const result = await pool.query<{
+      id: string;
+      inventory_id: string;
+      created_by_user_id: string | null;
+      title: string;
+      part_number: string;
+      manufacturer: string;
+      quantity: number;
+      starting_price: string;
+      reserve_price: string | null;
+      start_time: string;
+      end_time: string;
+      status: AuctionRecord["status"];
+      created_at: string;
+      updated_at: string;
+      highest_bid: string | null;
+      bid_count: string;
+    }>(
+      `select
+        a.*,
+        max(b.amount) as highest_bid,
+        count(b.id) as bid_count
+      from auctions a
+      left join bids b on b.auction_id = a.id
+      group by a.id
+      order by a.created_at desc`,
+    );
+    return result.rows.map((row) => ({
+      ...mapAuction(row as AuctionRecord),
+      highestBid: row.highest_bid === null ? null : Number(row.highest_bid),
+      bidCount: Number(row.bid_count),
+    }));
   },
 
   async findById(id: string) {
@@ -51,57 +100,47 @@ export const auctionsRepository = {
     return result.rows[0] ? mapAuction(result.rows[0]) : null;
   },
 
-  async getBids(auctionId: string) {
+  async findAuctionForInventory(inventoryId: string) {
+    const result = await pool.query(
+      `select 1
+       from auctions
+       where inventory_id = $1
+       limit 1`,
+      [inventoryId],
+    );
+    return result.rowCount > 0;
+  },
+
+  async findHighestBid(auctionId: string, client = pool) {
+    const result = await client.query<{ highest_bid: string | null }>(
+      "select max(amount) as highest_bid from bids where auction_id = $1",
+      [auctionId],
+    );
+    return result.rows[0]?.highest_bid === null || result.rows[0]?.highest_bid === undefined
+      ? null
+      : Number(result.rows[0].highest_bid);
+  },
+
+  async getBidsByAuctionId(auctionId: string) {
     const result = await pool.query<BidRecord>(
-      "select * from bids where auction_id = $1 order by amount desc, created_at asc",
+      "select * from bids where auction_id = $1 order by amount desc, timestamp asc",
       [auctionId],
     );
     return result.rows.map(mapBid);
   },
 
-  async create(input: {
-    title: string;
-    description: string;
-    category: string;
-    sellerName: string;
-    startingPrice: number;
-    reservePrice: number | null;
-    bidIncrement: number;
-    currency: string;
-    startsAt: string;
-    endsAt: string;
-  }) {
-    const status = new Date(input.startsAt) > new Date() ? "scheduled" : "live";
+  async publish(auctionId: string) {
     const result = await pool.query<AuctionRecord>(
-      `insert into auctions (
-        title, description, category, seller_name, starting_price, reserve_price,
-        current_price, bid_increment, currency, status, starts_at, ends_at
-      ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      returning *`,
-      [
-        input.title,
-        input.description,
-        input.category,
-        input.sellerName,
-        input.startingPrice,
-        input.reservePrice,
-        input.startingPrice,
-        input.bidIncrement,
-        input.currency,
-        status,
-        input.startsAt,
-        input.endsAt,
-      ],
+      `update auctions
+       set status = 'live'
+       where id = $1
+       returning *`,
+      [auctionId],
     );
-    return mapAuction(result.rows[0]);
+    return result.rows[0] ? mapAuction(result.rows[0]) : null;
   },
 
-  async placeBid(input: {
-    auctionId: string;
-    bidderName: string;
-    bidderCompany: string;
-    amount: number;
-  }) {
+  async placeBid(input: { auctionId: string; bidderCompanyId: string; amount: number }) {
     const client = await pool.connect();
     try {
       await client.query("begin");
@@ -113,31 +152,32 @@ export const auctionsRepository = {
       if (!auctionRow) {
         throw new ApiError(404, "Auction not found");
       }
+
       const auction = mapAuction(auctionRow);
-      const now = new Date();
-      if (auction.status === "closed" || now < new Date(auction.startsAt) || now > new Date(auction.endsAt)) {
+      if (auction.status === "ended" || auction.status === "sold") {
+        throw new ApiError(400, "Cannot bid on ended auction");
+      }
+      if (auction.status !== "live") {
         throw new ApiError(400, "Auction is not open for bidding");
       }
-      if (input.amount < auction.currentPrice + auction.bidIncrement) {
-        throw new ApiError(400, "Bid must meet the minimum increment");
+
+      const highestBid = await auctionsRepository.findHighestBid(input.auctionId, client);
+      const floor = highestBid ?? auction.startingPrice;
+      if (input.amount <= floor) {
+        throw new ApiError(400, "Bid must be higher than current highest bid");
       }
+
       const bidResult = await client.query<BidRecord>(
-        `insert into bids (auction_id, bidder_name, bidder_company, amount)
-         values ($1, $2, $3, $4)
+        `insert into bids (auction_id, bidder_company_id, amount)
+         values ($1, $2, $3)
          returning *`,
-        [input.auctionId, input.bidderName, input.bidderCompany, input.amount],
+        [input.auctionId, input.bidderCompanyId, input.amount],
       );
-      const updatedAuction = await client.query<AuctionRecord>(
-        `update auctions
-         set current_price = $2, status = case when status = 'draft' then 'live' else status end, updated_at = now()
-         where id = $1
-         returning *`,
-        [input.auctionId, input.amount],
-      );
+
       await client.query("commit");
       return {
-        auction: mapAuction(updatedAuction.rows[0]),
         bid: mapBid(bidResult.rows[0]),
+        highestBid: input.amount,
       };
     } catch (error) {
       await client.query("rollback");
@@ -147,12 +187,45 @@ export const auctionsRepository = {
     }
   },
 
-  async closeExpiredAuctions() {
-    await pool.query(
-      `update auctions
-       set status = 'closed', updated_at = now()
-       where status in ('scheduled', 'live') and ends_at <= now()`,
-    );
+  async closeAuction(auctionId: string) {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const auctionResult = await client.query<AuctionRecord>(
+        "select * from auctions where id = $1 for update",
+        [auctionId],
+      );
+      const auctionRow = auctionResult.rows[0];
+      if (!auctionRow) {
+        throw new ApiError(404, "Auction not found");
+      }
+
+      const auction = mapAuction(auctionRow);
+      if (auction.status === "ended" || auction.status === "sold") {
+        await client.query("commit");
+        return auction;
+      }
+
+      const highestBid = await auctionsRepository.findHighestBid(auctionId, client);
+      const shouldSell =
+        highestBid !== null &&
+        (auction.reservePrice === null || highestBid >= auction.reservePrice);
+
+      const status = shouldSell ? "sold" : "ended";
+      const updateResult = await client.query<AuctionRecord>(
+        `update auctions
+         set status = $2
+         where id = $1
+         returning *`,
+        [auctionId, status],
+      );
+      await client.query("commit");
+      return mapAuction(updateResult.rows[0]);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 };
-

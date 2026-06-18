@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import { auctionsRouter } from "./features/auctions/auctions.routes.js";
+import { inventoryRouter } from "./features/inventory/inventory.routes.js";
 import { errorHandler } from "./shared/error-handler.js";
 
 dotenv.config();
@@ -21,10 +22,10 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "mirai-auction-backend" });
 });
 
-app.use("/api/auctions", auctionsRouter);
+app.use("/inventory", inventoryRouter);
+app.use("/auctions", auctionsRouter);
 app.use(errorHandler);
 
 app.listen(port, () => {
   console.log(`Mirai Auction API listening on http://localhost:${port}`);
 });
-
