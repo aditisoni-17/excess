@@ -32,6 +32,11 @@ export async function createAuction(payload: {
   return response.data.data;
 }
 
+export async function publishAuction(auctionId: string) {
+  const response = await api.post<{ success: boolean; data: Auction }>(`/auctions/${auctionId}/publish`);
+  return response.data.data;
+}
+
 export async function placeBid(auctionId: string, payload: {
   bidderName: string;
   bidderCompany?: string;
